@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package asset_discovery;
+
+import "google/api/annotations.proto";
+import "health/health.proto";
+
+option go_package = "github.com/PAM-IDAM-Org/asset-discovery/api/gen";
+
+service AssetDiscoveryService {
+  rpc Health(health.HealthRequest) returns (health.HealthResponse) {
+    option (google.api.http) = {
+      get: "/health"
+    };
+  }
+}
+

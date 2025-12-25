@@ -11,5 +11,4 @@ type AppContext struct {
 	Postgre *config.Postgre
 	Env     *config.AppEnv
 	Redis   *storage.RedisClient
-	Kafka   *kafka.Writer
 }
