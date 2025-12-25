@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package health;
+
+option go_package = "github.com/PAM-IDAM-Org/asset-discovery/api/gen/health";
+
+message HealthRequest {}
+
+message HealthDetails {
+  string database_status = 1;
+  string database_message = 2;
+  string redis_status = 3;
+  string redis_message = 4;
+}
+
+message HealthMetadata {
+  string timestamp = 1;
+  string version = 2;
+  string service = 3;
+  string bind_address = 4;
+  repeated string supported_protocols = 5;
+}
+
+message HealthResponse {
+  string status = 1;
+  string message = 2;
+  HealthDetails details = 3;
+  HealthMetadata metadata = 4;
+}
+

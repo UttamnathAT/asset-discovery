@@ -2,16 +2,11 @@ package application
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/PAM-IDAM-Org/asset-discovery/internal/appcontext"
-	"github.com/Uttamnath64/arvo-fin/app/config"
-	"github.com/Uttamnath64/arvo-fin/app/requests"
-	"github.com/Uttamnath64/arvo-fin/app/storage"
-	"github.com/Uttamnath64/arvo-fin/fin-api/internal/routes"
-	"github.com/Uttamnath64/arvo-fin/pkg/logger"
-	"github.com/gin-contrib/cors"
-	"github.com/gin-gonic/gin"
+	"github.com/PAM-IDAM-Org/asset-discovery/internal/config"
+	"github.com/PAM-IDAM-Org/asset-discovery/internal/storage"
+	"github.com/PAM-IDAM-Org/asset-discovery/pkg/logger"
 	"github.com/joho/godotenv"
 )
 
@@ -26,63 +21,61 @@ func New() *Application {
 
 func (a *Application) Initialize() bool {
 	ctx := context.Background()
-	requests.NewResponse()
 
 	// Load env
 	_ = godotenv.Load()
 	env, err := config.LoadEnv()
 	if err != nil {
-		logger.New("none", nil).Error("Failed to load .env", err.Error())
+		logger.New("none", nil).Error("Failed to load .env", "error", err.Error())
 		return false
 	}
 
 	// Set logger
 	log := logger.New(env.Server.Environment, nil)
 
-	// Load config
-	var con config.Config
-	err = config.LoadConfig(env, &con)
+	// Load config (PostgreSQL) - optional for health check
+	var cfg *config.Config
+	cfg, err = config.LoadConfig(&env, log)
 	if err != nil {
-		log.Error("Failed to load config", err.Error())
-		return false
+		log.Warn("PostgreSQL not available, continuing without DB", "error", err.Error())
+		cfg = nil
 	}
 
-	// Load Redis
-	redis, err := storage.NewRedisClient(ctx, env.Redis.Addr, env.Redis.Password, env.Redis.DB)
+	// Load Redis - optional for health check
+	var redis *storage.RedisClient
+	redis, err = storage.NewRedisClient(ctx, env.Server.RedisAddr, "", env.Server.RedisDB)
 	if err != nil {
-		log.Error("Failed to load redis", err.Error())
-		return false
+		log.Warn("Redis not available, continuing without Redis", "error", err.Error())
+		redis = nil
 	}
 
 	// DI container
 	a.log = log
+	var postgre *config.Postgre
+	if cfg != nil {
+		postgre = cfg.Postgre
+	}
 	a.appContext = &appcontext.AppContext{
 		Log:     log,
-		Postgre: con.Postgre,
+		Postgre: postgre,
 		Env:     &env,
 		Redis:   redis,
 	}
 
 	return true
-
 }
 
-func (a *Application) Run() {
+func (a *Application) Run() error {
 
-	server := gin.Default()
-	corsConfig := cors.DefaultConfig()
-	corsConfig.AllowOrigins = []string{a.appContext.Env.Server.ClientOrigin}
-	corsConfig.AllowMethods = []string{"GET", "POST", "PUT"}
-	corsConfig.AllowHeaders = []string{"Origin", "Content-Type", "Authorization"}
-	corsConfig.AllowCredentials = true
-	server.Use(cors.New(corsConfig))
-
-	// Setup routes
-	routes.New(a.appContext, server).Handlers()
-
-	// Run server
-	if err := server.Run(fmt.Sprintf(":%d", a.appContext.Env.Server.HTTPPort)); err != nil {
-		a.log.Error("api-application-server", err.Error())
-		return
+	// Start gRPC server
+	if err := a.StartGRPCServer(); err != nil {
+		return err
 	}
+
+	// Start gRPC-Gateway server
+	if err := a.StartGRPCGateway(); err != nil {
+		return err
+	}
+
+	return nil
 }
